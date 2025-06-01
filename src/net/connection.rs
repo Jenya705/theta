@@ -26,6 +26,14 @@ use super::{
     },
 };
 
+/// There are 3 kinds of channel ids:
+/// - GlobalChannelId:
+///     a channel id that is assigned to each channel globally
+///     that means that if the global ids equal, then the channels are also the same
+/// - UniqueChannelId<LOCAL>:
+///     a channel id that is assigned to each registered channel, where
+///     - if LOCAL is true, then the channel's messages' sender is the client  
+///     - if LOCAL is false, then the channel's messages' receiver is the client
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct ChannelId<T>(pub(crate) u32, pub(crate) PhantomData<T>);
 
@@ -42,14 +50,20 @@ impl<T: PartialEq + Eq + Clone + Copy + Debug> Default for ChannelId<T> {
 }
 
 impl<T: PartialEq + Eq + Clone + Copy + Debug> ChannelId<T> {
-    const NULL: Self = Self::new(NULL_CHANNEL_ID);
+    pub(crate) const NULL: Self = Self::new(NULL_CHANNEL_ID);
+    pub(crate) const MAX: Self = Self::new(NULL_CHANNEL_ID - 1);
 
     pub(crate) const fn new(val: u32) -> Self {
+        debug_assert!(val <= NULL_CHANNEL_ID);
         Self(val, PhantomData)
     }
 
     pub fn is_null(&self) -> bool {
         *self == Self::NULL
+    }
+
+    pub fn value(&self) -> Option<u32> {
+        (!self.is_null()).then_some(self.0)
     }
 }
 
@@ -890,14 +904,14 @@ pub(crate) fn initialize_connection(
 
     let mut buffer = vec![];
 
-    let mut lock = buffers.write();
-
-    // todo: add new channel`` function
+    // todo: add new channel function
     for (_, id) in all.iter() {
         if let Some(ref reliable_channel) = provider.by_id(*id).unwrap().reliability {
             *resender.mut_capacity() += reliable_channel.additional_capacity;
         }
     }
+
+    let mut lock = buffers.write();
 
     for (i, (name, id)) in all.into_iter().enumerate() {
         let channel_id = ChannelId::new(i as u32);
@@ -919,7 +933,7 @@ pub(crate) fn initialize_connection(
             .encode(&mut buffer)
             .map_err(|_| ConnectionError::EncodeError)?;
 
-        let _ = send_packet(
+        send_packet(
             channel,
             &buffer,
             *state,
@@ -928,7 +942,7 @@ pub(crate) fn initialize_connection(
             orders,
             sender,
             None,
-        );
+        )?;
 
         buffer.clear();
 
@@ -944,7 +958,7 @@ pub(crate) fn initialize_connection(
 
     let mut resend_keys = vec![];
 
-    let _ = send_packet(
+    send_packet(
         channel,
         &buffer,
         *state,
@@ -953,7 +967,7 @@ pub(crate) fn initialize_connection(
         orders,
         sender,
         Some(&mut resend_keys),
-    );
+    )?;
 
     if let ConnectionState::Registration {
         last_packet_resend_key,
@@ -1116,7 +1130,7 @@ pub(crate) enum ConnectionError {
 pub const ACK_CHANNEL_NAME: &str = "__ack";
 pub const CHANNEL_MANAGEMENT_CHANNEL_NAME: &str = "__channel";
 
-const NULL_CHANNEL_ID: u32 = 1 << 31 - 1;
+const NULL_CHANNEL_ID: u32 = 1 << 31;
 const ACK_CHANNEL_ID_REGISTRATION_STAGE: u32 = NULL_CHANNEL_ID - 1;
 const CHANNEL_MANAGEMENT_CHANNEL_ID_REGISTRATION_STAGE: u32 = ACK_CHANNEL_ID_REGISTRATION_STAGE - 1;
 

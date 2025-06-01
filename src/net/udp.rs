@@ -19,7 +19,7 @@ use rand::Rng;
 use crate::{clone_all, util::channel::ManyToSingleChannel};
 
 use super::connection::{
-    ChannelData, ChannelId, ChannelProvider, Connection, ConnectionChannel,
+    ChannelId, ChannelProvider, Connection, ConnectionChannel,
     ConnectionChannelMessageSwapBuffer, ConnectionState, GlobalChannelData, GlobalChannelId,
     MAX_PACKET_LEN, PacketSender, handle_message, initialize_connection, send_packet,
     update_connection,
@@ -93,16 +93,16 @@ fn udp_read_loop(
 ) -> io::Result<()> {
     socket.set_read_timeout(Some(Duration::from_millis(CLOSED_CHECKING_TIMEOUT)))?;
 
-    let mut buf = vec![0u8; MAX_PACKET_LEN];
+    let mut buffer = vec![0u8; MAX_PACKET_LEN];
 
     let mut rng = rand::rng();
 
     loop {
-        match socket.recv_from(&mut buf) {
+        match socket.recv_from(&mut buffer) {
             Ok((len, addr)) => {
                 if rng.random::<f64>() >= fake_lag.fake_reading_probability {
                     event_queue.push(UdpEvent::Read {
-                        payload: buf[..len].to_vec(),
+                        payload: buffer[..len].to_vec(),
                         addr,
                     });
                 }
